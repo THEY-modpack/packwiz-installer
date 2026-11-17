@@ -49,6 +49,8 @@ class UpdateManager internal constructor(private val opts: Options, val ui: IUse
 		val multimcFolder: PackwizFilePath,
 		val side: Side,
 		val timeout: Long,
+		val lowRam: Boolean = false,
+		val lowGpu: Boolean = false,
 	)
 
 	// TODO: make this return a value based on results?
@@ -273,7 +275,20 @@ class UpdateManager internal constructor(private val opts: Options, val ui: IUse
 		if (indexFile.files.isEmpty()) {
 			Log.warn("Index is empty!")
 		}
-		val tasks = createTasksFromIndex(indexFile, opts.side)
+		val tasks = createTasksFromIndex(indexFile, opts.side).filterNot { task ->
+			val destination = task.metadata.destURI.rebase(opts.packFolder)
+
+			val isBootstrap = destination.filename.equals(
+				"packwiz-installer-bootstrap.jar",
+				ignoreCase = true
+			) && destination.parent.nioPath == opts.packFolder.nioPath
+
+			if (isBootstrap) {
+				Log.info("Ignoring $destination (managed by launcher)")
+			}
+
+			isBootstrap
+		}.toMutableList()
 		if (invalidateAll) {
 			Log.info("Side changed, invalidating all mods")
 		}

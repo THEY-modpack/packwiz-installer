@@ -1,5 +1,6 @@
 package link.infra.packwiz.installer
 
+import java.util.Locale
 import link.infra.packwiz.installer.metadata.IndexFile
 import link.infra.packwiz.installer.metadata.ManifestFile
 import link.infra.packwiz.installer.metadata.hash.Hash
@@ -19,7 +20,11 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
-internal class DownloadTask private constructor(val metadata: IndexFile.File, val index: IndexFile, private val downloadSide: Side) : IOptionDetails {
+internal class DownloadTask private constructor(
+	val metadata: IndexFile.File,
+	val index: IndexFile,
+	private val downloadSide: Side,
+) : IOptionDetails {
 	var cachedFile: ManifestFile.File? = null
 		private set
 
@@ -226,7 +231,25 @@ internal class DownloadTask private constructor(val metadata: IndexFile.File, va
 			}
 		}
 
-		// TODO: add .disabled support?
+		// Preserve manually disabled mods
+		val disabledPath = findDisabledJar(destPath)
+		if (disabledPath != null) {
+			val currentVersion = extractVersion(disabledPath.fileName.toString())
+			val newVersion = extractVersion(destPath.filename)
+
+			val disabledLocation = destPath.resolve("../${disabledPath.fileName}")
+
+			cachedFile = (cachedFile ?: ManifestFile.File()).also {
+				it.cachedLocation = disabledLocation
+			}
+
+			if (isNewerVersion(currentVersion, newVersion)) {
+				Log.warn("Disabled mod update available: ${disabledPath.fileName} -> ${destPath.filename}")
+			}
+
+			completionStatus = CompletionStatus.SKIPPED_DISABLED
+			return
+		}
 
 		try {
 			val hash: Hash<*>
@@ -311,6 +334,69 @@ internal class DownloadTask private constructor(val metadata: IndexFile.File, va
 		}
 
 		completionStatus = CompletionStatus.DOWNLOADED
+	}
+
+	private fun normalizeModName(fileName: String): String {
+		var name = fileName
+
+		if (name.endsWith(".disabled", ignoreCase = true)) {
+			name = name.dropLast(".disabled".length)
+		}
+		if (name.endsWith(".jar", ignoreCase = true)) {
+			name = name.dropLast(".jar".length)
+		}
+
+		// Remove Minecraft version 1.12 or 1.12.2
+		name = name.replace(Regex("(?<!\\d)1\\.12(?:\\.2)?(?=[._-]|$)"), "")
+
+		// Keep letters and significant symbols (! and +)
+		return name.replace(Regex("[0-9._-]"), "").lowercase(Locale.ROOT)
+	}
+
+	private fun isNewerVersion(currentVersion: List<Int>, newVersion: List<Int>): Boolean {
+		if (currentVersion.isEmpty() || newVersion.isEmpty()) return false
+
+		for (i in 0 until maxOf(currentVersion.size, newVersion.size)) {
+			val current = currentVersion.getOrElse(i) { 0 }
+			val new = newVersion.getOrElse(i) { 0 }
+
+			if (new != current) return new > current
+		}
+
+		return false
+	}
+
+	private fun extractVersion(fileName: String): List<Int> {
+		var name = fileName
+
+		if (name.endsWith(".disabled", ignoreCase = true)) {
+			name = name.dropLast(".disabled".length)
+		}
+		if (name.endsWith(".jar", ignoreCase = true)) {
+			name = name.dropLast(".jar".length)
+		}
+
+		name = name.replace(Regex("(?<!\\d)1\\.12(?:\\.2)?(?=[._-]|$)"), "")
+
+		return Regex("\\d+")
+			.findAll(name)
+			.mapNotNull { it.value.toIntOrNull() }
+			.toList()
+	}
+
+	private fun findDisabledJar(destPath: PackwizFilePath): java.nio.file.Path? {
+		val parent = destPath.nioPath.parent ?: return null
+		if (!Files.isDirectory(parent)) return null
+
+		val targetName = normalizeModName(destPath.filename)
+
+		return Files.newDirectoryStream(parent).use { files ->
+			val matches = files
+				.filter { it.fileName.toString().endsWith(".jar.disabled", ignoreCase = true) }
+				.filter { normalizeModName(it.fileName.toString()) == targetName }
+
+			if (matches.size == 1) matches.first() else null
+		}
 	}
 
 	companion object {
