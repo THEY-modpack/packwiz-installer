@@ -3,12 +3,10 @@ An installer for launching packwiz modpacks with MultiMC. You'll need [the boots
 
 ## What's New?
 
-- **Java 17**
+- **Java 25**
 
-  Java 17 is now required. This means Minecraft 1.18 and newer are supported, as well as forks running on Java 17–25.
-
-  For example, Cleanroom and Outlands for Minecraft 1.12.2:
-  [Cleanroom](https://github.com/CleanroomMC/Cleanroom) / [Outlands](https://github.com/Project-Outlands/Outlands)
+  Java 25 is now required. This means Minecraft 26.1 and newer are supported, as well as forks running on Java 25.<br>
+  Examples for Minecraft 1.12.2: [Cleanroom](https://github.com/CleanroomMC/Cleanroom) / [Outlands](https://github.com/Project-Outlands/Outlands)
 
 - **`.disabled` Support**
 
